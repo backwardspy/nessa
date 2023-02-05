@@ -1,0 +1,18 @@
+[package]
+name = "nessa6502-snake"
+description = "snake running on nessa6502"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/backwardspy/nessa"
+readme = "README.md"
+keywords = ["nes", "6502", "emulator"]
+categories = ["emulators"]
+
+[dependencies]
+color-eyre = "0.6.2"
+nessa6502 = { path = "../nessa6502" }
+nessa6502-disasm = { path = "../nessa6502-disasm" }
+pyxel-core = "1.9.11"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
