@@ -10,3 +10,4 @@ pub mod cpu;
 mod errors;
 pub use errors::Error;
 pub mod instruction;
+pub mod mem;

@@ -1,7 +1,7 @@
 use crate::addressing::Mode;
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(strum::Display, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Name {
     BRK,
     ORA,

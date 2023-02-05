@@ -1,2 +1,3 @@
 [workspace]
-members = ["nessa6502", "nessa6502-disasm", "nessa6502-snake"]
+members = ["nessa", "nessa-rom", "nessa6502", "nessa6502-disasm"]
+default-members = ["nessa"]

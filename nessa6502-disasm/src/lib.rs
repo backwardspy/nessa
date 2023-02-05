@@ -38,7 +38,7 @@ where
 
     let mut result = String::new();
     result.push_str(&format!("{bytes_str: <9}"));
-    result.push_str(&instruction.name.to_string());
+    result.push_str(&format!("{:?}", instruction.name));
 
     let address = match instruction.size {
         1 => 0,

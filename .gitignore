@@ -1,1 +1,4 @@
 /target
+rom/*
+!rom/nestest.nes
+!rom/snake.nes

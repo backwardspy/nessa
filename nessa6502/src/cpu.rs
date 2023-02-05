@@ -1,9 +1,11 @@
 use crate::{
     addressing,
     instruction::{self, INSTRUCTIONS},
+    mem::Bus,
     Error,
 };
 use bitflags::bitflags;
+use tracing::debug;
 
 bitflags! {
     pub struct Status: u8 {
@@ -41,32 +43,26 @@ pub struct Registers {
 // values of all of the registers in the CPU.
 pub struct CPU {
     pub reg: Registers,
-    pub mem: [u8; 0x10000],
     pub is_running: bool,
+    pub bus: Bus,
 }
 
 impl CPU {
     /// Create a new CPU.
     #[must_use]
-    pub const fn new() -> Self {
+    pub const fn new(bus: Bus) -> Self {
         Self {
             reg: Registers {
                 a: 0,
                 x: 0,
                 y: 0,
-                status: Status::empty(),
+                status: Status::INTERRUPT_DISABLE,
                 pc: 0,
                 sp: 0xFF,
             },
-            mem: [0; 0x10000],
             is_running: false,
+            bus,
         }
-    }
-
-    /// Load a program into memory.
-    pub fn load(&mut self, program: &[u8], start: u16) {
-        self.mem[start as usize..start as usize + program.len()].copy_from_slice(program);
-        self.write16(0xFFFC, start);
     }
 
     /// Reset the CPU.
@@ -77,6 +73,8 @@ impl CPU {
         self.set_flags(self.reg.a);
         self.reg.pc = self.read16(0xFFFC);
         self.is_running = true;
+
+        debug!("cpu reset: pc = 0x{:04X}", self.reg.pc);
     }
 
     /// Execute a program by repeatedly calling the `step` function until `is_running` is false.
@@ -205,15 +203,15 @@ impl CPU {
         value
     }
 
-    const fn read8(&self, address: u16) -> u8 {
-        self.mem[address as usize]
+    fn read8(&self, address: u16) -> u8 {
+        self.bus.read(address)
     }
 
     fn write8(&mut self, address: u16, value: u8) {
-        self.mem[address as usize] = value;
+        self.bus.write(address, value);
     }
 
-    const fn read16(&self, address: u16) -> u16 {
+    fn read16(&self, address: u16) -> u16 {
         let lo = self.read8(address);
         let hi = self.read8(address.wrapping_add(1));
         u16::from_le_bytes([lo, hi])
@@ -536,12 +534,5 @@ impl CPU {
         if self.reg.status.contains(Status::CARRY) {
             self.reg.pc = address;
         }
-    }
-}
-
-impl Default for CPU {
-    /// Create a new CPU.
-    fn default() -> Self {
-        Self::new()
     }
 }

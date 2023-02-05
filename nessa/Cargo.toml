@@ -1,0 +1,15 @@
+[package]
+name = "nessa"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nessa6502 = { path = "../nessa6502" }
+nessa6502-disasm = { path = "../nessa6502-disasm" }
+nessa-rom = { path = "../nessa-rom" }
+color-eyre = "0.6.2"
+clap = { version = "4.1.4", features = ["derive"] }
+tracing-subscriber = "0.3.16"
+tracing = "0.1.37"
+speedy2d = "1.10.0"
+rand = "0.8.5"
