@@ -8,7 +8,7 @@
 use nessa6502::{
     addressing,
     cpu::CPU,
-    instruction::{self, INSTRUCTIONS},
+    instruction::{self, Instruction, INSTRUCTIONS},
 };
 use thiserror::Error;
 
@@ -18,18 +18,116 @@ pub enum Error {
     EndOfStream,
 }
 
-struct BusIter<'a> {
+struct MemIter<'a> {
     cpu: &'a CPU,
     pc: u16,
 }
 
-impl Iterator for BusIter<'_> {
+impl<'a> MemIter<'a> {
+    const fn new(cpu: &'a CPU) -> Self {
+        Self {
+            cpu,
+            pc: cpu.reg.pc,
+        }
+    }
+}
+
+impl Iterator for MemIter<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let value = self.cpu.bus.read(self.pc);
+        let value = self.cpu.read8(self.pc);
         self.pc += 1;
         Some(value)
+    }
+}
+
+fn offset_8(cpu: &CPU, addr: u16, offset: u8) -> (u8, u8) {
+    let offset_addr = addr.to_le_bytes()[0].wrapping_add(offset);
+    let value = cpu.read8(u16::from(offset_addr));
+    (offset_addr, value)
+}
+
+fn offset_16(cpu: &CPU, addr: u16, offset: u8) -> (u16, u8) {
+    let offset_addr = addr.wrapping_add(u16::from(offset));
+    let value = cpu.read8(offset_addr);
+    (offset_addr, value)
+}
+
+fn format_address(cpu: &CPU, instruction: &Instruction, address: u16) -> String {
+    let show_value = !matches!(
+        instruction.name,
+        instruction::Name::JMP | instruction::Name::JSR
+    );
+    let value = cpu.read8(address);
+
+    match instruction.mode {
+        addressing::Mode::Immediate => format!("#${address:02X}"),
+        addressing::Mode::ZeroPage => {
+            if show_value {
+                format!("${address:02X} = {value:02X}")
+            } else {
+                format!("${address:02X}")
+            }
+        }
+        addressing::Mode::ZeroPageX => {
+            let (offset_address, value) = offset_8(cpu, address, cpu.reg.x);
+            format!("${address:02X},X @ {offset_address:02X} = {value:02X}")
+        }
+        addressing::Mode::ZeroPageY => {
+            let (offset_address, value) = offset_8(cpu, address, cpu.reg.y);
+            format!("${address:02X},Y @ {offset_address:02X} = {value:02X}")
+        }
+        addressing::Mode::Absolute => {
+            if show_value {
+                format!("${address:04X} = {value:02X}")
+            } else {
+                format!("${address:04X}")
+            }
+        }
+        addressing::Mode::AbsoluteX => {
+            let (offset_address, value) = offset_16(cpu, address, cpu.reg.x);
+            format!("${address:04X},X @ {offset_address:04X} = {value:02X}")
+        }
+        addressing::Mode::AbsoluteY => {
+            let (offset_address, value) = offset_16(cpu, address, cpu.reg.y);
+            format!("${address:04X},Y @ {offset_address:04X} = {value:02X}",)
+        }
+        addressing::Mode::Indirect => {
+            let value16 = cpu.read16_wrap(address);
+            format!("(${address:04X}) = {value16:04X}")
+        }
+        addressing::Mode::IndirectX => {
+            if show_value {
+                let offset_address = address.to_le_bytes()[0].wrapping_add(cpu.reg.x);
+                let resolved = cpu.read16_zp(offset_address);
+                let value = cpu.read8(resolved);
+                format!("(${address:02X},X) @ {offset_address:02X} = {resolved:04X} = {value:02X}",)
+            } else {
+                format!("(${address:02X},X)")
+            }
+        }
+        addressing::Mode::IndirectY => {
+            if show_value {
+                let address = address.to_le_bytes()[0];
+                let resolved = cpu.read16_zp(address).wrapping_add(u16::from(cpu.reg.y));
+                let value = cpu.read8(resolved);
+                format!(
+                    "(${address:02X}),Y = {:04X} @ {resolved:04X} = {value:02X}",
+                    cpu.read16_zp(address)
+                )
+            } else {
+                format!("(${address:02X}),Y")
+            }
+        }
+        addressing::Mode::Implied => String::new(),
+        addressing::Mode::Accumulator => "A".to_string(),
+        addressing::Mode::Relative => {
+            format!(
+                "${:04X}",
+                cpu.reg.pc + u16::from(instruction.size) + address
+            )
+        }
     }
 }
 
@@ -39,10 +137,7 @@ impl Iterator for BusIter<'_> {
 ///
 /// Returns an error if the iterator runs out of bytes too early.
 pub fn disassemble_instruction(cpu: &CPU) -> Result<String, Error> {
-    let mut next_bytes = BusIter {
-        cpu,
-        pc: cpu.reg.pc,
-    };
+    let mut next_bytes = MemIter::new(cpu);
     let opcode = next_bytes.next().ok_or(Error::EndOfStream)?;
     let instruction = &INSTRUCTIONS[opcode as usize];
     let next = next_bytes
@@ -56,8 +151,12 @@ pub fn disassemble_instruction(cpu: &CPU) -> Result<String, Error> {
     }
 
     let mut result = String::new();
-    result.push_str(&format!("{bytes_str: <9} "));
-    result.push_str(&format!("{:?}", instruction.name));
+    result.push_str(&format!("{bytes_str: <9}"));
+    result.push_str(&format!(
+        "{}{:?}",
+        if instruction.undocumented { '*' } else { ' ' },
+        instruction.name
+    ));
 
     let address = match instruction.size {
         1 => 0,
@@ -66,45 +165,7 @@ pub fn disassemble_instruction(cpu: &CPU) -> Result<String, Error> {
         _ => unreachable!(),
     };
 
-    let value = cpu.bus.read(address);
-
-    let show_value = !matches!(
-        instruction.name,
-        instruction::Name::JMP | instruction::Name::JSR
-    );
-
-    let address = match instruction.mode {
-        addressing::Mode::Immediate => format!("#${address:02X}"),
-        addressing::Mode::ZeroPage => {
-            if show_value {
-                format!("${address:02X} = {value:02X}")
-            } else {
-                format!("${address:02X}")
-            }
-        }
-        addressing::Mode::ZeroPageX => format!("${address:02X},X"),
-        addressing::Mode::ZeroPageY => format!("${address:02X},Y"),
-        addressing::Mode::Absolute => {
-            if show_value {
-                format!("${address:04X} = {value:02X}")
-            } else {
-                format!("${address:04X}")
-            }
-        }
-        addressing::Mode::AbsoluteX => format!("${address:04X},X"),
-        addressing::Mode::AbsoluteY => format!("${address:04X},Y"),
-        addressing::Mode::Indirect => format!("(${address:04X})"),
-        addressing::Mode::IndirectX => format!("(${address:02X},X)"),
-        addressing::Mode::IndirectY => format!("(${address:02X}),Y"),
-        addressing::Mode::Implied => String::new(),
-        addressing::Mode::Accumulator => "A".to_string(),
-        addressing::Mode::Relative => {
-            format!(
-                "${:04X}",
-                cpu.reg.pc + u16::from(instruction.size) + address
-            )
-        }
-    };
+    let address = format_address(cpu, instruction, address);
 
     if !address.is_empty() {
         result.push_str(&format!(" {address}"));
