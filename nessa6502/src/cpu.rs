@@ -7,6 +7,9 @@ use crate::{
 use bitflags::bitflags;
 use tracing::debug;
 
+const PPU_COLUMNS: u32 = 341;
+const PPU_ROWS: u32 = 262;
+
 bitflags! {
     pub struct Status: u8 {
         const CARRY = 0b0000_0001;
@@ -45,6 +48,10 @@ pub struct CPU {
     pub reg: Registers,
     pub is_running: bool,
     pub bus: Bus,
+    pub cycles: u32,
+    // temp until ppu is implemented
+    pub ppu_x: u32,
+    pub ppu_y: u32,
 }
 
 impl CPU {
@@ -56,12 +63,15 @@ impl CPU {
                 a: 0,
                 x: 0,
                 y: 0,
-                status: Status::INTERRUPT_DISABLE,
+                status: Status::empty(),
                 pc: 0,
-                sp: 0xFF,
+                sp: 0,
             },
             is_running: false,
             bus,
+            cycles: 0,
+            ppu_x: 0,
+            ppu_y: 0,
         }
     }
 
@@ -70,8 +80,16 @@ impl CPU {
         self.reg.a = 0;
         self.reg.x = 0;
         self.reg.y = 0;
-        self.set_flags(self.reg.a);
+        self.reg.status = Status::UNUSED | Status::INTERRUPT_DISABLE;
         self.reg.pc = self.read16(0xFFFC);
+        self.push16(self.reg.pc);
+        self.push8(self.reg.status.bits());
+
+        // tasty magic startup numbers
+        self.cycles = 7;
+        self.ppu_x = 21;
+        self.ppu_y = 0;
+
         self.is_running = true;
 
         debug!("cpu reset: pc = 0x{:04X}", self.reg.pc);
@@ -96,6 +114,8 @@ impl CPU {
     ///
     /// This function will return an error if the program contains an unknown opcode.
     pub fn step(&mut self) -> Result<(), Error> {
+        let prev_cycles = self.cycles;
+
         let code = self.next8();
         let instr = &INSTRUCTIONS[code as usize];
 
@@ -110,13 +130,19 @@ impl CPU {
             instruction::Name::STY => self.sty(instr.mode),
             instruction::Name::TAX => self.tax(),
             instruction::Name::TXA => self.txa(),
+            instruction::Name::TAY => self.tay(),
+            instruction::Name::TYA => self.tya(),
+            instruction::Name::TXS => self.txs(),
+            instruction::Name::TSX => self.tsx(),
             instruction::Name::BIT => self.bit(instr.mode),
             instruction::Name::INC if instr.mode == addressing::Mode::Accumulator => self.inc_a(),
             instruction::Name::INC => self.inc(instr.mode),
             instruction::Name::DEC if instr.mode == addressing::Mode::Accumulator => self.dec_a(),
             instruction::Name::DEC => self.dec(instr.mode),
             instruction::Name::INX => self.inx(),
+            instruction::Name::INY => self.iny(),
             instruction::Name::DEX => self.dex(),
+            instruction::Name::DEY => self.dey(),
             instruction::Name::JSR => self.jsr(instr.mode),
             instruction::Name::RTS => self.rts(),
             instruction::Name::ROL if instr.mode == addressing::Mode::Accumulator => self.rol_a(),
@@ -124,23 +150,57 @@ impl CPU {
             instruction::Name::ASL => self.asl(instr.mode),
             instruction::Name::LSR if instr.mode == addressing::Mode::Accumulator => self.lsr_a(),
             instruction::Name::LSR => self.lsr(instr.mode),
-            instruction::Name::SEC => self.sec(),
-            instruction::Name::CLC => self.clc(),
+            instruction::Name::SEC => self.reg.status.insert(Status::CARRY),
+            instruction::Name::CLC => self.reg.status.remove(Status::CARRY),
+            instruction::Name::SEI => self.reg.status.insert(Status::INTERRUPT_DISABLE),
+            instruction::Name::CLI => self.reg.status.remove(Status::INTERRUPT_DISABLE),
+            instruction::Name::SED => self.reg.status.insert(Status::DECIMAL_MODE),
+            instruction::Name::CLD => self.reg.status.remove(Status::DECIMAL_MODE),
+            instruction::Name::CLV => self.reg.status.remove(Status::OVERFLOW),
             instruction::Name::ORA => self.ora(instr.mode),
             instruction::Name::AND => self.and(instr.mode),
+            instruction::Name::EOR => self.eor(instr.mode),
             instruction::Name::ADC => self.adc(instr.mode),
             instruction::Name::SBC => self.sbc(instr.mode),
             instruction::Name::CMP => self.cmp(instr.mode),
             instruction::Name::CPX => self.cpx(instr.mode),
             instruction::Name::CPY => self.cpy(instr.mode),
             instruction::Name::JMP => self.jmp(instr.mode),
+            instruction::Name::PHA => self.pha(),
+            instruction::Name::PLA => self.pla(),
+            instruction::Name::PHP => self.php(),
+            instruction::Name::PLP => self.plp(),
             instruction::Name::BEQ => self.beq(instr.mode),
             instruction::Name::BNE => self.bne(instr.mode),
             instruction::Name::BPL => self.bpl(instr.mode),
             instruction::Name::BMI => self.bmi(instr.mode),
             instruction::Name::BCC => self.bcc(instr.mode),
             instruction::Name::BCS => self.bcs(instr.mode),
+            instruction::Name::BVC => self.bvc(instr.mode),
+            instruction::Name::BVS => self.bvs(instr.mode),
             _ => return Err(Error::UnimplementedOpcode(instr.name)),
+        }
+
+        self.cycles += u32::from(instr.cycles);
+
+        // add a cycle if a page was crossed (and the intruction takes longer)
+        if instr.cycles_page_crossed > 0 {
+            // FIXME: nasty hack for now
+            self.reg.pc -= u16::from(instr.size) - 1;
+            let pc = self.reg.pc;
+            let address = self.resolve_address(instr.mode);
+            if address & 0xFF00 != pc & 0xFF00 {
+                self.cycles += u32::from(instr.cycles_page_crossed);
+            }
+        }
+
+        self.ppu_x += (self.cycles - prev_cycles) * 3;
+        if self.ppu_x >= PPU_COLUMNS {
+            self.ppu_x -= PPU_COLUMNS;
+            self.ppu_y += 1;
+            if self.ppu_y > PPU_ROWS {
+                self.ppu_y = 0;
+            }
         }
 
         Ok(())
@@ -182,8 +242,8 @@ impl CPU {
                 address.wrapping_add(u16::from(self.reg.y))
             }
             addressing::Mode::Relative => {
-                let offset = self.next8();
-                let offset = i8::from_le_bytes([offset]);
+                #[allow(clippy::cast_possible_wrap)]
+                let offset = self.next8() as i8;
                 #[allow(clippy::cast_sign_loss)]
                 self.reg.pc.wrapping_add(offset as u16)
             }
@@ -215,12 +275,6 @@ impl CPU {
         let lo = self.read8(address);
         let hi = self.read8(address.wrapping_add(1));
         u16::from_le_bytes([lo, hi])
-    }
-
-    fn write16(&mut self, address: u16, value: u16) {
-        let [lo, hi] = value.to_le_bytes();
-        self.write8(address, lo);
-        self.write8(address.wrapping_add(1), hi);
     }
 
     fn push8(&mut self, value: u8) {
@@ -310,6 +364,25 @@ impl CPU {
         self.set_flags(self.reg.a);
     }
 
+    fn tay(&mut self) {
+        self.reg.y = self.reg.a;
+        self.set_flags(self.reg.y);
+    }
+
+    fn tya(&mut self) {
+        self.reg.a = self.reg.y;
+        self.set_flags(self.reg.a);
+    }
+
+    fn txs(&mut self) {
+        self.reg.sp = self.reg.x;
+    }
+
+    fn tsx(&mut self) {
+        self.reg.x = self.reg.sp;
+        self.set_flags(self.reg.x);
+    }
+
     fn bit(&mut self, mode: addressing::Mode) {
         let value = self.read_arg(mode);
         self.reg.status.set(Status::ZERO, value & self.reg.a == 0);
@@ -350,9 +423,19 @@ impl CPU {
         self.set_flags(self.reg.x);
     }
 
+    fn iny(&mut self) {
+        self.reg.y = self.reg.y.wrapping_add(1);
+        self.set_flags(self.reg.y);
+    }
+
     fn dex(&mut self) {
         self.reg.x = self.reg.x.wrapping_sub(1);
         self.set_flags(self.reg.x);
+    }
+
+    fn dey(&mut self) {
+        self.reg.y = self.reg.y.wrapping_sub(1);
+        self.set_flags(self.reg.y);
     }
 
     fn jsr(&mut self, mode: addressing::Mode) {
@@ -419,14 +502,6 @@ impl CPU {
         self.set_flags(value);
     }
 
-    fn sec(&mut self) {
-        self.reg.status.insert(Status::CARRY);
-    }
-
-    fn clc(&mut self) {
-        self.reg.status.remove(Status::CARRY);
-    }
-
     fn ora(&mut self, mode: addressing::Mode) {
         let value = self.read_arg(mode);
         self.reg.a |= value;
@@ -439,17 +514,23 @@ impl CPU {
         self.set_flags(self.reg.a);
     }
 
+    fn eor(&mut self, mode: addressing::Mode) {
+        let value = self.read_arg(mode);
+        self.reg.a ^= value;
+        self.set_flags(self.reg.a);
+    }
+
     fn do_add(&mut self, reg: u16, value: u16) {
         let mut result = reg + value;
         if self.reg.status.contains(Status::CARRY) {
             result += 1;
         }
-        self.reg.a = result.to_le_bytes()[0];
         self.reg.status.set(Status::CARRY, result > 0xFF);
         self.reg.status.set(
             Status::OVERFLOW,
-            (reg ^ result).wrapping_neg() & (value ^ result) & 0x80 == 0x80,
+            (reg ^ result) & (value ^ result) & 0x80 != 0,
         );
+        self.reg.a = result.to_le_bytes()[0];
         self.set_flags(self.reg.a);
     }
 
@@ -461,7 +542,7 @@ impl CPU {
 
     fn sbc(&mut self, mode: addressing::Mode) {
         let a = u16::from(self.reg.a);
-        let value = u16::from(self.read_arg(mode)) ^ 0x00FF;
+        let value = u16::from(self.read_arg(mode).wrapping_neg().wrapping_sub(1));
         self.do_add(a, value);
     }
 
@@ -494,10 +575,37 @@ impl CPU {
         self.reg.pc = address;
     }
 
+    fn pha(&mut self) {
+        self.push8(self.reg.a);
+    }
+
+    fn pla(&mut self) {
+        self.reg.a = self.pop8();
+        self.set_flags(self.reg.a);
+    }
+
+    fn php(&mut self) {
+        self.push8((self.reg.status | Status::BREAK).bits());
+    }
+
+    fn plp(&mut self) {
+        self.reg.status = Status::from_bits_truncate(self.pop8()) | Status::UNUSED;
+        self.reg.status.remove(Status::BREAK);
+    }
+
+    fn add_branch_cycles(&mut self, address: u16) {
+        self.cycles += 1;
+        let page_crossed = (self.reg.pc & 0xFF00) != (address & 0xFF00);
+        if page_crossed {
+            self.cycles += 1;
+        }
+    }
+
     fn beq(&mut self, mode: addressing::Mode) {
         let address = self.resolve_address(mode);
         if self.reg.status.contains(Status::ZERO) {
             self.reg.pc = address;
+            self.add_branch_cycles(address);
         }
     }
 
@@ -505,6 +613,7 @@ impl CPU {
         let address = self.resolve_address(mode);
         if !self.reg.status.contains(Status::ZERO) {
             self.reg.pc = address;
+            self.add_branch_cycles(address);
         }
     }
 
@@ -512,6 +621,7 @@ impl CPU {
         let address = self.resolve_address(mode);
         if !self.reg.status.contains(Status::NEGATIVE) {
             self.reg.pc = address;
+            self.add_branch_cycles(address);
         }
     }
 
@@ -519,6 +629,7 @@ impl CPU {
         let address = self.resolve_address(mode);
         if self.reg.status.contains(Status::NEGATIVE) {
             self.reg.pc = address;
+            self.add_branch_cycles(address);
         }
     }
 
@@ -526,6 +637,7 @@ impl CPU {
         let address = self.resolve_address(mode);
         if !self.reg.status.contains(Status::CARRY) {
             self.reg.pc = address;
+            self.add_branch_cycles(address);
         }
     }
 
@@ -533,6 +645,23 @@ impl CPU {
         let address = self.resolve_address(mode);
         if self.reg.status.contains(Status::CARRY) {
             self.reg.pc = address;
+            self.add_branch_cycles(address);
+        }
+    }
+
+    fn bvc(&mut self, mode: addressing::Mode) {
+        let address = self.resolve_address(mode);
+        if !self.reg.status.contains(Status::OVERFLOW) {
+            self.reg.pc = address;
+            self.add_branch_cycles(address);
+        }
+    }
+
+    fn bvs(&mut self, mode: addressing::Mode) {
+        let address = self.resolve_address(mode);
+        if self.reg.status.contains(Status::OVERFLOW) {
+            self.reg.pc = address;
+            self.add_branch_cycles(address);
         }
     }
 }

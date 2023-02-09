@@ -124,7 +124,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::ORA, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::ASL, 3, 6, 0, Mode::Absolute),
     Opcode::new(Name::SLO, 3, 6, 0, Mode::Absolute),
-    Opcode::new(Name::BPL, 2, 2, 1, Mode::Relative), // 0x10
+    Opcode::new(Name::BPL, 2, 2, 0, Mode::Relative), // 0x10
     Opcode::new(Name::ORA, 2, 5, 1, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::SLO, 2, 8, 0, Mode::IndirectY),
@@ -156,7 +156,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::AND, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::ROL, 3, 6, 0, Mode::Absolute),
     Opcode::new(Name::RLA, 3, 6, 0, Mode::Absolute),
-    Opcode::new(Name::BMI, 2, 2, 1, Mode::Relative), // 0x30
+    Opcode::new(Name::BMI, 2, 2, 0, Mode::Relative), // 0x30
     Opcode::new(Name::AND, 2, 5, 1, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::RLA, 2, 8, 0, Mode::IndirectY),
@@ -188,7 +188,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::EOR, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::LSR, 3, 6, 0, Mode::Absolute),
     Opcode::new(Name::SRE, 3, 6, 0, Mode::Absolute),
-    Opcode::new(Name::BVC, 2, 2, 1, Mode::Relative), // 0x50
+    Opcode::new(Name::BVC, 2, 2, 0, Mode::Relative), // 0x50
     Opcode::new(Name::EOR, 2, 5, 1, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::SRE, 2, 8, 0, Mode::IndirectY),
@@ -220,7 +220,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::ADC, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::ROR, 3, 6, 0, Mode::Absolute),
     Opcode::new(Name::RRA, 3, 6, 0, Mode::Absolute),
-    Opcode::new(Name::BVS, 2, 2, 1, Mode::Relative), // 0x70
+    Opcode::new(Name::BVS, 2, 2, 0, Mode::Relative), // 0x70
     Opcode::new(Name::ADC, 2, 5, 1, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::RRA, 2, 8, 0, Mode::IndirectY),
@@ -252,7 +252,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::STA, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::STX, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::SAX, 3, 4, 0, Mode::Absolute),
-    Opcode::new(Name::BCC, 2, 2, 1, Mode::Relative), // 0x90
+    Opcode::new(Name::BCC, 2, 2, 0, Mode::Relative), // 0x90
     Opcode::new(Name::STA, 2, 6, 0, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::AHX, 2, 6, 0, Mode::IndirectY),
@@ -284,7 +284,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::LDA, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::LDX, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::LAX, 3, 4, 0, Mode::Absolute),
-    Opcode::new(Name::BCS, 2, 2, 1, Mode::Relative), // 0xB0
+    Opcode::new(Name::BCS, 2, 2, 0, Mode::Relative), // 0xB0
     Opcode::new(Name::LDA, 2, 5, 1, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::LAX, 2, 5, 1, Mode::IndirectY),
@@ -316,7 +316,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::CMP, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::DEC, 3, 6, 0, Mode::Absolute),
     Opcode::new(Name::DCP, 3, 6, 0, Mode::Absolute),
-    Opcode::new(Name::BNE, 2, 2, 1, Mode::Relative), // 0xD0
+    Opcode::new(Name::BNE, 2, 2, 0, Mode::Relative), // 0xD0
     Opcode::new(Name::CMP, 2, 5, 1, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::DCP, 2, 8, 0, Mode::IndirectY),
@@ -348,7 +348,7 @@ pub const INSTRUCTIONS: &[Opcode] = &[
     Opcode::new(Name::SBC, 3, 4, 0, Mode::Absolute),
     Opcode::new(Name::INC, 3, 6, 0, Mode::Absolute),
     Opcode::new(Name::ISC, 3, 6, 0, Mode::Absolute),
-    Opcode::new(Name::BEQ, 2, 2, 1, Mode::Relative), // 0xF0
+    Opcode::new(Name::BEQ, 2, 2, 0, Mode::Relative), // 0xF0
     Opcode::new(Name::SBC, 2, 5, 1, Mode::IndirectY),
     Opcode::new(Name::KIL, 1, 0, 0, Mode::Implied),
     Opcode::new(Name::ISC, 2, 8, 0, Mode::IndirectY),

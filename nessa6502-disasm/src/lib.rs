@@ -5,7 +5,11 @@
     clippy::unwrap_used,
     clippy::expect_used
 )]
-use nessa6502::{addressing, instruction::INSTRUCTIONS};
+use nessa6502::{
+    addressing,
+    cpu::CPU,
+    instruction::{self, INSTRUCTIONS},
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -14,19 +18,34 @@ pub enum Error {
     EndOfStream,
 }
 
+struct BusIter<'a> {
+    cpu: &'a CPU,
+    pc: u16,
+}
+
+impl Iterator for BusIter<'_> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let value = self.cpu.bus.read(self.pc);
+        self.pc += 1;
+        Some(value)
+    }
+}
+
 /// Disassemble a single instruction from the given byte iterator.
 ///
 /// # Errors
 ///
 /// Returns an error if the iterator runs out of bytes too early.
-pub fn disassemble_instruction<ByteIter>(mut bytes: ByteIter) -> Result<String, Error>
-where
-    ByteIter: Iterator<Item = u8>,
-{
-    let opcode = bytes.next().ok_or(Error::EndOfStream)?;
+pub fn disassemble_instruction(cpu: &CPU) -> Result<String, Error> {
+    let mut next_bytes = BusIter {
+        cpu,
+        pc: cpu.reg.pc,
+    };
+    let opcode = next_bytes.next().ok_or(Error::EndOfStream)?;
     let instruction = &INSTRUCTIONS[opcode as usize];
-
-    let next = bytes
+    let next = next_bytes
         .take(instruction.size as usize - 1)
         .collect::<Vec<_>>();
 
@@ -37,7 +56,7 @@ where
     }
 
     let mut result = String::new();
-    result.push_str(&format!("{bytes_str: <9}"));
+    result.push_str(&format!("{bytes_str: <9} "));
     result.push_str(&format!("{:?}", instruction.name));
 
     let address = match instruction.size {
@@ -47,11 +66,31 @@ where
         _ => unreachable!(),
     };
 
+    let value = cpu.bus.read(address);
+
+    let show_value = !matches!(
+        instruction.name,
+        instruction::Name::JMP | instruction::Name::JSR
+    );
+
     let address = match instruction.mode {
-        addressing::Mode::Immediate => format!("#${address:<2X} ({address})"),
-        addressing::Mode::ZeroPage => format!("${address:02X}"),
+        addressing::Mode::Immediate => format!("#${address:02X}"),
+        addressing::Mode::ZeroPage => {
+            if show_value {
+                format!("${address:02X} = {value:02X}")
+            } else {
+                format!("${address:02X}")
+            }
+        }
         addressing::Mode::ZeroPageX => format!("${address:02X},X"),
         addressing::Mode::ZeroPageY => format!("${address:02X},Y"),
+        addressing::Mode::Absolute => {
+            if show_value {
+                format!("${address:04X} = {value:02X}")
+            } else {
+                format!("${address:04X}")
+            }
+        }
         addressing::Mode::AbsoluteX => format!("${address:04X},X"),
         addressing::Mode::AbsoluteY => format!("${address:04X},Y"),
         addressing::Mode::Indirect => format!("(${address:04X})"),
@@ -59,7 +98,12 @@ where
         addressing::Mode::IndirectY => format!("(${address:02X}),Y"),
         addressing::Mode::Implied => String::new(),
         addressing::Mode::Accumulator => "A".to_string(),
-        addressing::Mode::Absolute | addressing::Mode::Relative => format!("${address:04X}"),
+        addressing::Mode::Relative => {
+            format!(
+                "${:04X}",
+                cpu.reg.pc + u16::from(instruction.size) + address
+            )
+        }
     };
 
     if !address.is_empty() {
