@@ -179,7 +179,6 @@ fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
-    println!("{args:#?}");
 
     // setup graphical stuff
     let window = Window::new_centered("Nessa", (512, 512))

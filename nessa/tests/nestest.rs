@@ -8,6 +8,7 @@ use tracing::{trace, warn};
 
 #[test]
 fn test_nestest_rom() {
+    color_eyre::install().unwrap();
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();

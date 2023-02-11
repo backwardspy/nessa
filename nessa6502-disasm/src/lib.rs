@@ -123,10 +123,15 @@ fn format_address(cpu: &CPU, instruction: &Instruction, address: u16) -> String 
         addressing::Mode::Implied => String::new(),
         addressing::Mode::Accumulator => "A".to_string(),
         addressing::Mode::Relative => {
-            format!(
-                "${:04X}",
-                cpu.reg.pc + u16::from(instruction.size) + address
-            )
+            #[allow(clippy::cast_possible_wrap)]
+            let offset = address.to_le_bytes()[0] as i8;
+            #[allow(clippy::cast_sign_loss)]
+            let address = cpu
+                .reg
+                .pc
+                .wrapping_add(u16::from(instruction.size))
+                .wrapping_add(offset as u16);
+            format!("${address:04X}",)
         }
     }
 }

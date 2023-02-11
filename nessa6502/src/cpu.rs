@@ -118,15 +118,16 @@ impl CPU {
     pub fn step(&mut self) -> Result<(), Error> {
         let prev_cycles = self.cycles;
 
-        let code = self.next8();
+        let code = self.read8(self.reg.pc);
         let instr = &INSTRUCTIONS[code as usize];
 
+        // we can detect if pc was modified by the instruction
+        let pc = self.reg.pc;
+
         match instr.name {
+            // documented instructions
             instruction::Name::BRK => self.is_running = false,
-            instruction::Name::NOP => {
-                // just advance the program counter
-                self.reg.pc += u16::from(instr.size - 1);
-            }
+            instruction::Name::NOP => (),
             instruction::Name::LDA => self.lda(instr.mode),
             instruction::Name::STA => self.sta(instr.mode),
             instruction::Name::LDX => self.ldx(instr.mode),
@@ -187,18 +188,35 @@ impl CPU {
             instruction::Name::BCS => self.bcs(instr.mode),
             instruction::Name::BVC => self.bvc(instr.mode),
             instruction::Name::BVS => self.bvs(instr.mode),
+
+            // undocumented instructions
+            instruction::Name::LAX => self.lax(instr.mode),
+            instruction::Name::SAX => self.sax(instr.mode),
+            instruction::Name::DCP => self.dcp(instr.mode),
+            instruction::Name::ISB => self.isb(instr.mode),
+            instruction::Name::SLO => self.slo(instr.mode),
+            instruction::Name::RLA => self.rla(instr.mode),
+            instruction::Name::SRE => self.sre(instr.mode),
+            instruction::Name::RRA => self.rra(instr.mode),
+
             _ => return Err(Error::UnimplementedOpcode(instr.name)),
         }
 
+        // calculate the number of cycles that have passed
         self.cycles += u32::from(instr.cycles);
         if instr.cycles_page_crossed > 0 {
-            self.reg.pc -= u16::from(instr.size) - 1;
             let (_, page_crossed) = self.resolve_address(instr.mode);
             if page_crossed {
                 self.cycles += u32::from(instr.cycles_page_crossed);
             }
         }
 
+        // update pc if no branch/jump occurred
+        if pc == self.reg.pc {
+            self.reg.pc += u16::from(instr.size);
+        }
+
+        // calculate ppu cycles & render.
         self.ppu_x += (self.cycles - prev_cycles) * 3;
         if self.ppu_x >= PPU_COLUMNS {
             self.ppu_x -= PPU_COLUMNS;
@@ -217,62 +235,54 @@ impl CPU {
 
     fn resolve_address(&mut self, mode: addressing::Mode) -> (u16, bool) {
         match mode {
-            addressing::Mode::Immediate => (self.reg.pc, false),
-            addressing::Mode::ZeroPage => (u16::from(self.next8()), false),
+            addressing::Mode::Immediate => (self.reg.pc + 1, false),
+            addressing::Mode::ZeroPage => (u16::from(self.read8(self.reg.pc + 1)), false),
             addressing::Mode::ZeroPageX => {
-                let address = self.next8();
+                let address = self.read8(self.reg.pc + 1);
                 (u16::from(address.wrapping_add(self.reg.x)), false)
             }
             addressing::Mode::ZeroPageY => {
-                let address = self.next8();
+                let address = self.read8(self.reg.pc + 1);
                 (u16::from(address.wrapping_add(self.reg.y)), false)
             }
-            addressing::Mode::Absolute => (self.next16(), false),
+            addressing::Mode::Absolute => (self.read16(self.reg.pc + 1), false),
             addressing::Mode::AbsoluteX => {
-                let address = self.next16();
+                let address = self.read16(self.reg.pc + 1);
                 let result = address.wrapping_add(u16::from(self.reg.x));
                 (result, Self::page_crossed(address, result))
             }
             addressing::Mode::AbsoluteY => {
-                let address = self.next16();
+                let address = self.read16(self.reg.pc + 1);
                 let result = address.wrapping_add(u16::from(self.reg.y));
                 (result, Self::page_crossed(address, result))
             }
             addressing::Mode::Indirect => {
-                let address = self.next16();
+                let address = self.read16(self.reg.pc + 1);
                 (self.read16_wrap(address), false)
             }
             addressing::Mode::IndirectX => {
-                let address = self.next8();
+                let address = self.read8(self.reg.pc + 1);
                 let address = address.wrapping_add(self.reg.x);
                 (self.read16_zp(address), false)
             }
             addressing::Mode::IndirectY => {
-                let address = self.next8();
+                let address = self.read8(self.reg.pc + 1);
                 let address = self.read16_zp(address);
                 let result = address.wrapping_add(u16::from(self.reg.y));
                 (result, Self::page_crossed(address, result))
             }
             addressing::Mode::Relative => {
                 #[allow(clippy::cast_possible_wrap)]
-                let offset = self.next8() as i8;
+                let offset = self.read8(self.reg.pc + 1) as i8;
                 #[allow(clippy::cast_sign_loss)]
-                (self.reg.pc.wrapping_add(offset as u16), false)
+                // FIXME: we add 2 here because the offset is relative to the end of the instruction
+                (
+                    self.reg.pc.wrapping_add(offset.wrapping_add(2) as u16),
+                    false,
+                )
             }
             addressing::Mode::Implied | addressing::Mode::Accumulator => unreachable!(),
         }
-    }
-
-    fn next8(&mut self) -> u8 {
-        let value = self.read8(self.reg.pc);
-        self.reg.pc += 1;
-        value
-    }
-
-    fn next16(&mut self) -> u16 {
-        let value = self.read16(self.reg.pc);
-        self.reg.pc += 2;
-        value
     }
 
     #[must_use]
@@ -330,11 +340,7 @@ impl CPU {
 
     fn read_arg(&mut self, mode: addressing::Mode) -> u8 {
         let (address, _) = self.resolve_address(mode);
-        let value = self.read8(address);
-        if mode == addressing::Mode::Immediate {
-            self.reg.pc += 1;
-        }
-        value
+        self.read8(address)
     }
 
     fn set_flags(&mut self, value: u8) {
@@ -345,7 +351,7 @@ impl CPU {
     }
 }
 
-/// Instruction implementations.
+/// Documented instruction implementations.
 impl CPU {
     fn lda(&mut self, mode: addressing::Mode) {
         let value = self.read_arg(mode);
@@ -465,7 +471,7 @@ impl CPU {
     }
 
     fn jsr(&mut self, mode: addressing::Mode) {
-        let ret = self.reg.pc.wrapping_add(1);
+        let ret = self.reg.pc.wrapping_add(2);
         self.push16(ret);
         let (address, _) = self.resolve_address(mode);
         self.reg.pc = address;
@@ -527,8 +533,7 @@ impl CPU {
         self.write8(address, value);
     }
 
-    fn do_asl(&mut self, value: u8) -> u8 {
-        let mut value = value;
+    fn do_asl(&mut self, mut value: u8) -> u8 {
         self.reg
             .status
             .set(Status::CARRY, value & 0b1000_0000 == 0b1000_0000);
@@ -548,21 +553,22 @@ impl CPU {
         self.write8(address, value);
     }
 
-    fn lsr_a(&mut self) {
-        let mut value = self.reg.a;
+    fn do_lsr(&mut self, mut value: u8) -> u8 {
         self.reg.status.set(Status::CARRY, value & 1 == 1);
         value >>= 1;
-        self.reg.a = value;
         self.set_flags(value);
+        value
+    }
+
+    fn lsr_a(&mut self) {
+        self.reg.a = self.do_lsr(self.reg.a);
     }
 
     fn lsr(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
-        let mut value = self.read8(address);
-        self.reg.status.set(Status::CARRY, value & 1 == 1);
-        value >>= 1;
+        let value = self.read8(address);
+        let value = self.do_lsr(value);
         self.write8(address, value);
-        self.set_flags(value);
     }
 
     fn ora(&mut self, mode: addressing::Mode) {
@@ -658,7 +664,7 @@ impl CPU {
 
     fn add_branch_cycles(&mut self, address: u16) {
         self.cycles += 1;
-        if Self::page_crossed(self.reg.pc, address) {
+        if Self::page_crossed(self.reg.pc + 2, address) {
             self.cycles += 1;
         }
     }
@@ -666,64 +672,129 @@ impl CPU {
     fn beq(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if self.reg.status.contains(Status::ZERO) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
     }
 
     fn bne(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if !self.reg.status.contains(Status::ZERO) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
     }
 
     fn bpl(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if !self.reg.status.contains(Status::NEGATIVE) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
     }
 
     fn bmi(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if self.reg.status.contains(Status::NEGATIVE) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
     }
 
     fn bcc(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if !self.reg.status.contains(Status::CARRY) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
     }
 
     fn bcs(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if self.reg.status.contains(Status::CARRY) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
     }
 
     fn bvc(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if !self.reg.status.contains(Status::OVERFLOW) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
     }
 
     fn bvs(&mut self, mode: addressing::Mode) {
         let (address, _) = self.resolve_address(mode);
         if self.reg.status.contains(Status::OVERFLOW) {
-            self.reg.pc = address;
             self.add_branch_cycles(address);
+            self.reg.pc = address;
         }
+    }
+}
+
+/// Undocumented instructions
+impl CPU {
+    fn lax(&mut self, mode: addressing::Mode) {
+        let value = self.read_arg(mode);
+        self.reg.a = value;
+        self.reg.x = value;
+        self.set_flags(value);
+    }
+
+    fn sax(&mut self, mode: addressing::Mode) {
+        let (address, _) = self.resolve_address(mode);
+        self.write8(address, self.reg.a & self.reg.x);
+    }
+
+    fn dcp(&mut self, mode: addressing::Mode) {
+        let (address, _) = self.resolve_address(mode);
+        let value = self.read8(address).wrapping_sub(1);
+        self.write8(address, value);
+        self.do_compare(u16::from(self.reg.a), u16::from(value));
+    }
+
+    fn isb(&mut self, mode: addressing::Mode) {
+        let (address, _) = self.resolve_address(mode);
+        let value = self.read8(address).wrapping_add(1);
+        self.write8(address, value);
+        let value = u16::from(value.wrapping_neg().wrapping_sub(1));
+        self.do_add(u16::from(self.reg.a), value);
+    }
+
+    fn slo(&mut self, mode: addressing::Mode) {
+        let (address, _) = self.resolve_address(mode);
+        let value = self.read8(address);
+        let value = self.do_asl(value);
+        self.write8(address, value);
+        self.reg.a |= value;
+        self.set_flags(self.reg.a);
+    }
+
+    fn rla(&mut self, mode: addressing::Mode) {
+        let (address, _) = self.resolve_address(mode);
+        let value = self.read8(address);
+        let value = self.do_rol(value);
+        self.write8(address, value);
+        self.reg.a &= value;
+        self.set_flags(self.reg.a);
+    }
+
+    fn sre(&mut self, mode: addressing::Mode) {
+        let (address, _) = self.resolve_address(mode);
+        let value = self.read8(address);
+        let value = self.do_lsr(value);
+        self.write8(address, value);
+        self.reg.a ^= value;
+        self.set_flags(self.reg.a);
+    }
+
+    fn rra(&mut self, mode: addressing::Mode) {
+        let (address, _) = self.resolve_address(mode);
+        let value = self.read8(address);
+        let value = self.do_ror(value);
+        self.write8(address, value);
+        self.do_add(u16::from(self.reg.a), u16::from(value));
     }
 }
