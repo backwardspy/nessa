@@ -1,3 +1,10 @@
 [workspace]
-members = ["nessa", "nessa-rom", "nessa6502", "nessa6502-disasm"]
+members = [
+    "nessa",
+    "nessa-rom",
+    "nessa-cpu",
+    "nessa-ppu",
+    "nessa-mem",
+    "nessa-disasm",
+]
 default-members = ["nessa"]

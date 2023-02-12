@@ -1,11 +1,19 @@
 [package]
 name = "nessa"
+description = "a simple & accurate NES emulator"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/backwardspy/nessa"
+readme = "README.md"
+keywords = ["nes", "emulator", "6502"]
+categories = ["emulation"]
 
 [dependencies]
-nessa6502 = { path = "../nessa6502" }
-nessa6502-disasm = { path = "../nessa6502-disasm" }
+nessa-cpu = { path = "../nessa-cpu" }
+nessa-ppu = { path = "../nessa-ppu" }
+nessa-mem = { path = "../nessa-mem" }
+nessa-disasm = { path = "../nessa-disasm" }
 nessa-rom = { path = "../nessa-rom" }
 color-eyre = "0.6.2"
 clap = { version = "4.1.4", features = ["derive"] }

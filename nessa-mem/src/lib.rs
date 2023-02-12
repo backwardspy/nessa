@@ -1,3 +1,4 @@
+use nessa_ppu::PPU;
 use nessa_rom::ROM;
 use tracing::{error, warn};
 
@@ -15,18 +16,38 @@ const PPU_MASK: u16 = 0x2007;
 pub struct Bus {
     pub ram: [u8; RAM_SIZE],
     pub rom: ROM,
+    pub ppu: PPU,
 }
 
 impl Bus {
     #[must_use]
-    pub const fn new(rom: ROM) -> Self {
+    pub const fn new(rom: ROM, ppu: PPU) -> Self {
         Self {
             ram: [0; RAM_SIZE],
             rom,
+            ppu,
         }
     }
 
-    pub fn read(&self, address: u16) -> u8 {
+    pub fn read_ro(&self, address: u16) -> u8 {
+        match address {
+            RAM_START..=RAM_END => {
+                let address = address & RAM_MASK;
+                self.ram[address as usize]
+            }
+            PPU_START..=PPU_END => {
+                warn!("attempted read-only ppu access: {address:04X}");
+                0
+            }
+            ROM_START..=0xFFFF => self.read_rom(address - ROM_START),
+            _ => {
+                warn!("out of bounds read-only access: {address:04X}");
+                0
+            }
+        }
+    }
+
+    pub fn read(&mut self, address: u16) -> u8 {
         match address {
             RAM_START..=RAM_END => {
                 let address = address & RAM_MASK;
@@ -35,8 +56,7 @@ impl Bus {
             PPU_START..=PPU_END => {
                 // TODO: implement PPU
                 let mirror_address = address & PPU_MASK;
-                warn!("ppu read: {address:04X} ({mirror_address:04X})");
-                0
+                self.ppu.read(mirror_address, &self.rom)
             }
             ROM_START..=0xFFFF => self.read_rom(address - ROM_START),
             _ => {

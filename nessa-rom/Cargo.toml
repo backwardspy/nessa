@@ -1,7 +1,13 @@
 [package]
 name = "nessa-rom"
+description = "NES iROM file parser"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/backwardspy/nessa"
+readme = "README.md"
+keywords = ["nes", "rom", "parser"]
+categories = ["emulation"]
 
 [dependencies]
 byteorder = "1.4.3"

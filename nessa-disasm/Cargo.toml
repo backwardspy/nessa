@@ -1,5 +1,5 @@
 [package]
-name = "nessa6502-disasm"
+name = "nessa-disasm"
 description = "a simple 6502 disassembler"
 version = "0.1.0"
 edition = "2021"
@@ -11,4 +11,4 @@ categories = ["disassembler"]
 
 [dependencies]
 thiserror = "1.0.38"
-nessa6502 = { path = "../nessa6502" }
+nessa-cpu = { path = "../nessa-cpu" }

@@ -1,10 +1,10 @@
 use crate::{
     addressing,
     instruction::{self, INSTRUCTIONS},
-    mem::Bus,
     Error,
 };
 use bitflags::bitflags;
+use nessa_mem::Bus;
 use tracing::debug;
 
 const PPU_COLUMNS: u32 = 341;
@@ -47,11 +47,11 @@ pub struct Registers {
 pub struct CPU {
     pub reg: Registers,
     pub is_running: bool,
-    pub bus: Bus,
     pub cycles: u32,
     // temp until ppu is implemented
     pub ppu_x: u32,
     pub ppu_y: u32,
+    pub bus: Bus,
 }
 
 impl CPU {
@@ -285,24 +285,33 @@ impl CPU {
         }
     }
 
-    #[must_use]
-    pub fn read8(&self, address: u16) -> u8 {
+    pub fn read8(&mut self, address: u16) -> u8 {
         self.bus.read(address)
     }
 
-    fn write8(&mut self, address: u16, value: u8) {
+    #[must_use]
+    pub fn read8_ro(&self, address: u16) -> u8 {
+        self.bus.read_ro(address)
+    }
+
+    pub fn write8(&mut self, address: u16, value: u8) {
         self.bus.write(address, value);
     }
 
-    #[must_use]
-    pub fn read16(&self, address: u16) -> u16 {
+    pub fn read16(&mut self, address: u16) -> u16 {
         let lo = self.read8(address);
         let hi = self.read8(address.wrapping_add(1));
         u16::from_le_bytes([lo, hi])
     }
 
     #[must_use]
-    pub fn read16_wrap(&self, address: u16) -> u16 {
+    pub fn read16_ro(&self, address: u16) -> u16 {
+        let lo = self.read8_ro(address);
+        let hi = self.read8_ro(address.wrapping_add(1));
+        u16::from_le_bytes([lo, hi])
+    }
+
+    pub fn read16_wrap(&mut self, address: u16) -> u16 {
         // wrap on page boundaries
         let lo = self.read8(address);
         let hi = self.read8(address & 0xFF00 | (address + 1) & 0x00FF);
@@ -310,9 +319,23 @@ impl CPU {
     }
 
     #[must_use]
-    pub fn read16_zp(&self, address: u8) -> u16 {
+    pub fn read16_wrap_ro(&self, address: u16) -> u16 {
+        // wrap on page boundaries
+        let lo = self.read8_ro(address);
+        let hi = self.read8_ro(address & 0xFF00 | (address + 1) & 0x00FF);
+        u16::from_le_bytes([lo, hi])
+    }
+
+    pub fn read16_zp(&mut self, address: u8) -> u16 {
         let lo = self.read8(u16::from(address));
         let hi = self.read8(u16::from(address.wrapping_add(1)));
+        u16::from_le_bytes([lo, hi])
+    }
+
+    #[must_use]
+    pub fn read16_zp_ro(&self, address: u8) -> u16 {
+        let lo = self.read8_ro(u16::from(address));
+        let hi = self.read8_ro(u16::from(address.wrapping_add(1)));
         u16::from_le_bytes([lo, hi])
     }
 

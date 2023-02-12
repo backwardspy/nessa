@@ -2,7 +2,9 @@ use std::{collections::HashSet, fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
 use color_eyre::Result;
-use nessa6502::{cpu::CPU, mem::Bus};
+use nessa_cpu::CPU;
+use nessa_mem::Bus;
+use nessa_ppu::PPU;
 use nessa_rom::ROM;
 use speedy2d::{
     color::Color,
@@ -40,7 +42,7 @@ impl Iterator for ByteReader<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let byte = self.cpu.bus.read(self.address);
+        let byte = self.cpu.read8_ro(self.address);
         self.address += 1;
         Some(byte)
     }
@@ -65,7 +67,7 @@ impl EmulatorWindow {
 
     fn step(&mut self) -> Result<()> {
         if self.hacks.contains(&Hack::Snake) {
-            self.cpu.bus.write(0xFE, rand::random());
+            self.cpu.write8(0xFE, rand::random());
         }
 
         self.cpu.step()?;
@@ -102,16 +104,16 @@ impl WindowHandler for EmulatorWindow {
         if self.hacks.contains(&Hack::Snake) {
             match virtual_key_code {
                 Some(VirtualKeyCode::W) => {
-                    self.cpu.bus.write(0xFF, 0x77);
+                    self.cpu.write8(0xFF, 0x77);
                 }
                 Some(VirtualKeyCode::A) => {
-                    self.cpu.bus.write(0xFF, 0x61);
+                    self.cpu.write8(0xFF, 0x61);
                 }
                 Some(VirtualKeyCode::S) => {
-                    self.cpu.bus.write(0xFF, 0x73);
+                    self.cpu.write8(0xFF, 0x73);
                 }
                 Some(VirtualKeyCode::D) => {
-                    self.cpu.bus.write(0xFF, 0x64);
+                    self.cpu.write8(0xFF, 0x64);
                 }
 
                 _ => {}
@@ -144,7 +146,7 @@ impl WindowHandler for EmulatorWindow {
         );
         for y in 0..32 {
             for x in 0..32 {
-                let pixel = self.cpu.bus.read(0x200 + y * 32 + x);
+                let pixel = self.cpu.read8(0x200 + y * 32 + x);
                 if pixel > 0 {
                     let color = match pixel {
                         0..=63 => Color::from_rgb(243.0 / 255.0, 139.0 / 255.0, 168.0 / 255.0),
@@ -195,7 +197,9 @@ fn main() -> Result<()> {
     }
 
     let rom = ROM::from_ines(&fs::read(&args.rom_file)?)?;
-    let mut cpu = CPU::new(Bus::new(rom));
+    let ppu = PPU::new();
+    let bus = Bus::new(rom, ppu);
+    let mut cpu = CPU::new(bus);
     cpu.reset();
 
     if args.hack.contains(&Hack::Nestest) {

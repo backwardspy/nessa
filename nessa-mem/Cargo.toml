@@ -1,0 +1,15 @@
+[package]
+name = "nessa-mem"
+description = "nessa bus emulation"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/backwardspy/nessa"
+readme = "README.md"
+keywords = ["nes", "emulation", "memory"]
+categories = ["emulation"]
+
+[dependencies]
+nessa-rom = { path = "../nessa-rom" }
+nessa-ppu = { path = "../nessa-ppu" }
+tracing = "0.1.37"

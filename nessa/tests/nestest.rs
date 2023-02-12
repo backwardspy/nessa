@@ -1,8 +1,6 @@
-use nessa6502::{
-    cpu::{Status, CPU},
-    mem::Bus,
-};
-use nessa6502_disasm::disassemble_instruction;
+use nessa_cpu::{Status, CPU};
+use nessa_disasm::disassemble_instruction;
+use nessa_mem::Bus;
 use nessa_rom::ROM;
 use tracing::{trace, warn};
 

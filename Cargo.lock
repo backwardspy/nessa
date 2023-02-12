@@ -954,9 +954,11 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "color-eyre",
+ "nessa-cpu",
+ "nessa-disasm",
+ "nessa-mem",
+ "nessa-ppu",
  "nessa-rom",
- "nessa6502",
- "nessa6502-disasm",
  "rand",
  "speedy2d",
  "tracing",
@@ -964,28 +966,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "nessa-rom"
-version = "0.1.0"
-dependencies = [
- "byteorder",
- "thiserror",
-]
-
-[[package]]
-name = "nessa6502"
+name = "nessa-cpu"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "nessa-mem",
  "nessa-rom",
  "thiserror",
  "tracing",
 ]
 
 [[package]]
-name = "nessa6502-disasm"
+name = "nessa-disasm"
 version = "0.1.0"
 dependencies = [
- "nessa6502",
+ "nessa-cpu",
+ "thiserror",
+]
+
+[[package]]
+name = "nessa-mem"
+version = "0.1.0"
+dependencies = [
+ "nessa-ppu",
+ "nessa-rom",
+ "tracing",
+]
+
+[[package]]
+name = "nessa-ppu"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "nessa-rom",
+ "tracing",
+]
+
+[[package]]
+name = "nessa-rom"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
  "thiserror",
 ]
 

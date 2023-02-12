@@ -15,7 +15,7 @@ pub enum Mapper {
     NROM,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Mirroring {
     Horizontal,
     Vertical,

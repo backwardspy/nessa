@@ -6,8 +6,8 @@
     clippy::expect_used
 )]
 pub mod addressing;
-pub mod cpu;
+mod cpu;
+pub use cpu::{Status, CPU};
 mod errors;
 pub use errors::Error;
 pub mod instruction;
-pub mod mem;

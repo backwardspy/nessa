@@ -5,10 +5,10 @@
     clippy::unwrap_used,
     clippy::expect_used
 )]
-use nessa6502::{
+use nessa_cpu::{
     addressing,
-    cpu::CPU,
     instruction::{self, Instruction, INSTRUCTIONS},
+    CPU,
 };
 use thiserror::Error;
 
@@ -36,7 +36,7 @@ impl Iterator for MemIter<'_> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let value = self.cpu.read8(self.pc);
+        let value = self.cpu.read8_ro(self.pc);
         self.pc += 1;
         Some(value)
     }
@@ -44,13 +44,13 @@ impl Iterator for MemIter<'_> {
 
 fn offset_8(cpu: &CPU, addr: u16, offset: u8) -> (u8, u8) {
     let offset_addr = addr.to_le_bytes()[0].wrapping_add(offset);
-    let value = cpu.read8(u16::from(offset_addr));
+    let value = cpu.read8_ro(u16::from(offset_addr));
     (offset_addr, value)
 }
 
 fn offset_16(cpu: &CPU, addr: u16, offset: u8) -> (u16, u8) {
     let offset_addr = addr.wrapping_add(u16::from(offset));
-    let value = cpu.read8(offset_addr);
+    let value = cpu.read8_ro(offset_addr);
     (offset_addr, value)
 }
 
@@ -59,7 +59,7 @@ fn format_address(cpu: &CPU, instruction: &Instruction, address: u16) -> String 
         instruction.name,
         instruction::Name::JMP | instruction::Name::JSR
     );
-    let value = cpu.read8(address);
+    let value = cpu.read8_ro(address);
 
     match instruction.mode {
         addressing::Mode::Immediate => format!("#${address:02X}"),
@@ -94,14 +94,14 @@ fn format_address(cpu: &CPU, instruction: &Instruction, address: u16) -> String 
             format!("${address:04X},Y @ {offset_address:04X} = {value:02X}",)
         }
         addressing::Mode::Indirect => {
-            let value16 = cpu.read16_wrap(address);
+            let value16 = cpu.read16_wrap_ro(address);
             format!("(${address:04X}) = {value16:04X}")
         }
         addressing::Mode::IndirectX => {
             if show_value {
                 let offset_address = address.to_le_bytes()[0].wrapping_add(cpu.reg.x);
-                let resolved = cpu.read16_zp(offset_address);
-                let value = cpu.read8(resolved);
+                let resolved = cpu.read16_zp_ro(offset_address);
+                let value = cpu.read8_ro(resolved);
                 format!("(${address:02X},X) @ {offset_address:02X} = {resolved:04X} = {value:02X}",)
             } else {
                 format!("(${address:02X},X)")
@@ -110,11 +110,11 @@ fn format_address(cpu: &CPU, instruction: &Instruction, address: u16) -> String 
         addressing::Mode::IndirectY => {
             if show_value {
                 let address = address.to_le_bytes()[0];
-                let resolved = cpu.read16_zp(address).wrapping_add(u16::from(cpu.reg.y));
-                let value = cpu.read8(resolved);
+                let resolved = cpu.read16_zp_ro(address).wrapping_add(u16::from(cpu.reg.y));
+                let value = cpu.read8_ro(resolved);
                 format!(
                     "(${address:02X}),Y = {:04X} @ {resolved:04X} = {value:02X}",
-                    cpu.read16_zp(address)
+                    cpu.read16_zp_ro(address)
                 )
             } else {
                 format!("(${address:02X}),Y")
