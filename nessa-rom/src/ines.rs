@@ -5,14 +5,21 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use crate::{Error, Mapper, Mirroring, ROM};
 
 impl ROM {
+    /// Create a `ROM` from an `iNES` file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file is not a valid `iNES` file or if the mapper is not supported
     pub fn from_ines(ines: &[u8]) -> Result<Self, Error> {
         let mut cursor = Cursor::new(ines);
-        let magic = cursor.read_u32::<LittleEndian>().unwrap();
-        if magic != 0x1a53454e {
+        let magic = cursor
+            .read_u32::<LittleEndian>()
+            .map_err(|_| Error::EndOfFile)?;
+        if magic != 0x1A53_454E {
             return Err(Error::InvalidMagic);
         }
 
-        let mut rom = ROM::new();
+        let mut rom = Self::new();
 
         let mapper_id = (ines[7] & 0xf0) | (ines[6] >> 4);
         rom.mapper = match mapper_id {

@@ -1,3 +1,10 @@
+#![warn(
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::cargo,
+    clippy::unwrap_used,
+    clippy::expect_used
+)]
 mod ines;
 
 #[derive(thiserror::Error, Debug)]
@@ -31,8 +38,9 @@ pub struct ROM {
 }
 
 impl ROM {
-    pub fn new() -> Self {
-        ROM {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
             mapper: Mapper::NROM,
             mirroring: Mirroring::Horizontal,
             trainer: None,

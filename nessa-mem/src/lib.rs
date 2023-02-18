@@ -1,3 +1,10 @@
+#![warn(
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::cargo,
+    clippy::unwrap_used,
+    clippy::expect_used
+)]
 use nessa_cpu::MemoryAccess;
 use nessa_rom::ROM;
 use tracing::{error, warn};
@@ -14,7 +21,10 @@ const RAM_MASK: u16 = 0x07FF;
 const PPU_MASK: u16 = 0x2007;
 
 pub trait PPU {
-    fn read(&mut self, addr: u16, rom: &ROM) -> u8;
+    fn read(&mut self, rom: &ROM) -> u8;
+    fn write_data(&mut self, value: u8, rom: &ROM);
+    fn write_ctrl(&mut self, value: u8);
+    fn write_addr(&mut self, value: u8);
 }
 
 pub struct Bus<P>
@@ -77,9 +87,14 @@ where
                 let address = address & RAM_MASK;
                 self.ram[address as usize]
             }
-            PPU_START..=PPU_END => {
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
+                warn!("read from write-only PPU address: {address:04X}");
+                0
+            }
+            0x2007 => self.ppu.read(&self.rom),
+            0x2008..=PPU_END => {
                 let mirror_address = address & PPU_MASK;
-                self.ppu.read(mirror_address, &self.rom)
+                self.read(mirror_address)
             }
             ROM_START..=0xFFFF => self.read_rom(address - ROM_START),
             _ => {
@@ -95,9 +110,12 @@ where
                 let address = address & RAM_MASK;
                 self.ram[address as usize] = value;
             }
-            PPU_START..=PPU_END => {
+            0x2000 => self.ppu.write_ctrl(value),
+            0x2006 => self.ppu.write_addr(value),
+            0x2007 => self.ppu.write_data(value, &self.rom),
+            0x2008..=PPU_END => {
                 let mirror_address = address & PPU_MASK;
-                warn!("ppu write: {address:04X} ({mirror_address:04X}) = {value:02X}");
+                self.write(mirror_address, value);
             }
             ROM_START..=0xFFFF => {
                 error!("attempted write to ROM: {address:04X} = {value:02X}");
