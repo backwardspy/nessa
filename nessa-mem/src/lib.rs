@@ -1,4 +1,4 @@
-use nessa_ppu::PPU;
+use nessa_cpu::MemoryAccess;
 use nessa_rom::ROM;
 use tracing::{error, warn};
 
@@ -13,15 +13,25 @@ const RAM_SIZE: usize = 0x0800;
 const RAM_MASK: u16 = 0x07FF;
 const PPU_MASK: u16 = 0x2007;
 
-pub struct Bus {
-    pub ram: [u8; RAM_SIZE],
-    pub rom: ROM,
-    pub ppu: PPU,
+pub trait PPU {
+    fn read(&mut self, addr: u16, rom: &ROM) -> u8;
 }
 
-impl Bus {
+pub struct Bus<P>
+where
+    P: PPU,
+{
+    pub ram: [u8; RAM_SIZE],
+    pub rom: ROM,
+    pub ppu: P,
+}
+
+impl<P> Bus<P>
+where
+    P: PPU,
+{
     #[must_use]
-    pub const fn new(rom: ROM, ppu: PPU) -> Self {
+    pub const fn new(rom: ROM, ppu: P) -> Self {
         Self {
             ram: [0; RAM_SIZE],
             rom,
@@ -29,7 +39,21 @@ impl Bus {
         }
     }
 
-    pub fn read_ro(&self, address: u16) -> u8 {
+    fn read_rom(&self, address: u16) -> u8 {
+        if self.rom.prg_rom.len() == 0x4000 {
+            let address = address % 0x4000;
+            self.rom.prg_rom[address as usize]
+        } else {
+            self.rom.prg_rom[address as usize]
+        }
+    }
+}
+
+impl<P> MemoryAccess for Bus<P>
+where
+    P: PPU,
+{
+    fn read_ro(&self, address: u16) -> u8 {
         match address {
             RAM_START..=RAM_END => {
                 let address = address & RAM_MASK;
@@ -47,14 +71,13 @@ impl Bus {
         }
     }
 
-    pub fn read(&mut self, address: u16) -> u8 {
+    fn read(&mut self, address: u16) -> u8 {
         match address {
             RAM_START..=RAM_END => {
                 let address = address & RAM_MASK;
                 self.ram[address as usize]
             }
             PPU_START..=PPU_END => {
-                // TODO: implement PPU
                 let mirror_address = address & PPU_MASK;
                 self.ppu.read(mirror_address, &self.rom)
             }
@@ -66,7 +89,7 @@ impl Bus {
         }
     }
 
-    pub fn write(&mut self, address: u16, value: u8) {
+    fn write(&mut self, address: u16, value: u8) {
         match address {
             RAM_START..=RAM_END => {
                 let address = address & RAM_MASK;
@@ -82,15 +105,6 @@ impl Bus {
             _ => {
                 warn!("out of bounds write: {address:04X} = {value:02X}");
             }
-        }
-    }
-
-    fn read_rom(&self, address: u16) -> u8 {
-        if self.rom.prg_rom.len() == 0x4000 {
-            let address = address % 0x4000;
-            self.rom.prg_rom[address as usize]
-        } else {
-            self.rom.prg_rom[address as usize]
         }
     }
 }

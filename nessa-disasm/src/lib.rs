@@ -8,7 +8,7 @@
 use nessa_cpu::{
     addressing,
     instruction::{self, Instruction, INSTRUCTIONS},
-    CPU,
+    MemoryAccess, CPU,
 };
 use thiserror::Error;
 
@@ -18,13 +18,19 @@ pub enum Error {
     EndOfStream,
 }
 
-struct MemIter<'a> {
-    cpu: &'a CPU,
+struct MemIter<'a, M>
+where
+    M: MemoryAccess,
+{
+    cpu: &'a CPU<M>,
     pc: u16,
 }
 
-impl<'a> MemIter<'a> {
-    const fn new(cpu: &'a CPU) -> Self {
+impl<'a, M> MemIter<'a, M>
+where
+    M: MemoryAccess,
+{
+    const fn new(cpu: &'a CPU<M>) -> Self {
         Self {
             cpu,
             pc: cpu.reg.pc,
@@ -32,7 +38,10 @@ impl<'a> MemIter<'a> {
     }
 }
 
-impl Iterator for MemIter<'_> {
+impl<M> Iterator for MemIter<'_, M>
+where
+    M: MemoryAccess,
+{
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -42,19 +51,28 @@ impl Iterator for MemIter<'_> {
     }
 }
 
-fn offset_8(cpu: &CPU, addr: u16, offset: u8) -> (u8, u8) {
+fn offset_8<M>(cpu: &CPU<M>, addr: u16, offset: u8) -> (u8, u8)
+where
+    M: MemoryAccess,
+{
     let offset_addr = addr.to_le_bytes()[0].wrapping_add(offset);
     let value = cpu.read8_ro(u16::from(offset_addr));
     (offset_addr, value)
 }
 
-fn offset_16(cpu: &CPU, addr: u16, offset: u8) -> (u16, u8) {
+fn offset_16<M>(cpu: &CPU<M>, addr: u16, offset: u8) -> (u16, u8)
+where
+    M: MemoryAccess,
+{
     let offset_addr = addr.wrapping_add(u16::from(offset));
     let value = cpu.read8_ro(offset_addr);
     (offset_addr, value)
 }
 
-fn format_address(cpu: &CPU, instruction: &Instruction, address: u16) -> String {
+fn format_address<M>(cpu: &CPU<M>, instruction: &Instruction, address: u16) -> String
+where
+    M: MemoryAccess,
+{
     let show_value = !matches!(
         instruction.name,
         instruction::Name::JMP | instruction::Name::JSR
@@ -141,7 +159,10 @@ fn format_address(cpu: &CPU, instruction: &Instruction, address: u16) -> String 
 /// # Errors
 ///
 /// Returns an error if the iterator runs out of bytes too early.
-pub fn disassemble_instruction(cpu: &CPU) -> Result<String, Error> {
+pub fn disassemble_instruction<M>(cpu: &CPU<M>) -> Result<String, Error>
+where
+    M: MemoryAccess,
+{
     let mut next_bytes = MemIter::new(cpu);
     let opcode = next_bytes.next().ok_or(Error::EndOfStream)?;
     let instruction = &INSTRUCTIONS[opcode as usize];

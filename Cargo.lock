@@ -970,7 +970,6 @@ name = "nessa-cpu"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "nessa-mem",
  "nessa-rom",
  "thiserror",
  "tracing",
@@ -988,7 +987,7 @@ dependencies = [
 name = "nessa-mem"
 version = "0.1.0"
 dependencies = [
- "nessa-ppu",
+ "nessa-cpu",
  "nessa-rom",
  "tracing",
 ]
@@ -998,6 +997,7 @@ name = "nessa-ppu"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "nessa-mem",
  "nessa-rom",
  "tracing",
 ]

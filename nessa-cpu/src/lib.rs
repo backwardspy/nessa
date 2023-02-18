@@ -7,7 +7,7 @@
 )]
 pub mod addressing;
 mod cpu;
-pub use cpu::{Status, CPU};
+pub use cpu::{MemoryAccess, Status, CPU};
 mod errors;
 pub use errors::Error;
 pub mod instruction;

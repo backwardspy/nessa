@@ -110,7 +110,20 @@ impl PPU {
             .increment(self.control.vram_increment() as usize);
     }
 
-    pub fn read(&mut self, address: u16, rom: &ROM) -> u8 {
+    fn mirror_address(&self, address: u16, mirroring: Mirroring) -> u16 {
+        let address = (address & 0x2FFF) - 0x2000;
+        let table = address / 0x400;
+        match (mirroring, table) {
+            (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) => address - 0x800,
+            (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => address - 0x400,
+            (Mirroring::Horizontal, 3) => address - 0x800,
+            _ => address,
+        }
+    }
+}
+
+impl nessa_mem::PPU for PPU {
+    fn read(&mut self, address: u16, rom: &ROM) -> u8 {
         match address {
             0x0000..=0x1FFF => {
                 let value = self.buffer;
@@ -131,17 +144,6 @@ impl PPU {
                 warn!("out of bunds PPU read at address {address:#04X}");
                 0
             }
-        }
-    }
-
-    fn mirror_address(&self, address: u16, mirroring: Mirroring) -> u16 {
-        let address = (address & 0x2FFF) - 0x2000;
-        let table = address / 0x400;
-        match (mirroring, table) {
-            (Mirroring::Vertical, 2) | (Mirroring::Vertical, 3) => address - 0x800,
-            (Mirroring::Horizontal, 1) | (Mirroring::Horizontal, 2) => address - 0x400,
-            (Mirroring::Horizontal, 3) => address - 0x800,
-            _ => address,
         }
     }
 }

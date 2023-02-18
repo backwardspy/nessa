@@ -11,5 +11,5 @@ categories = ["emulation"]
 
 [dependencies]
 nessa-rom = { path = "../nessa-rom" }
-nessa-ppu = { path = "../nessa-ppu" }
+nessa-cpu = { path = "../nessa-cpu" }
 tracing = "0.1.37"

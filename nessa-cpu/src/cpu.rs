@@ -4,7 +4,6 @@ use crate::{
     Error,
 };
 use bitflags::bitflags;
-use nessa_mem::Bus;
 use tracing::debug;
 
 const PPU_COLUMNS: u32 = 341;
@@ -42,22 +41,28 @@ pub struct Registers {
     pub sp: u8,
 }
 
+pub trait MemoryAccess {
+    fn read_ro(&self, addr: u16) -> u8;
+    fn read(&mut self, addr: u16) -> u8;
+    fn write(&mut self, addr: u16, value: u8);
+}
+
 // This is the CPU struct. It contains a Registers struct, which contains the
 // values of all of the registers in the CPU.
-pub struct CPU {
+pub struct CPU<M: MemoryAccess> {
     pub reg: Registers,
     pub is_running: bool,
     pub cycles: u32,
     // temp until ppu is implemented
     pub ppu_x: u32,
     pub ppu_y: u32,
-    pub bus: Bus,
+    pub mem: M,
 }
 
-impl CPU {
+impl<M: MemoryAccess> CPU<M> {
     /// Create a new CPU.
     #[must_use]
-    pub const fn new(bus: Bus) -> Self {
+    pub const fn new(mem: M) -> Self {
         Self {
             reg: Registers {
                 a: 0,
@@ -68,7 +73,7 @@ impl CPU {
                 sp: 0,
             },
             is_running: false,
-            bus,
+            mem,
             cycles: 0,
             ppu_x: 0,
             ppu_y: 0,
@@ -286,16 +291,16 @@ impl CPU {
     }
 
     pub fn read8(&mut self, address: u16) -> u8 {
-        self.bus.read(address)
+        self.mem.read(address)
     }
 
     #[must_use]
     pub fn read8_ro(&self, address: u16) -> u8 {
-        self.bus.read_ro(address)
+        self.mem.read_ro(address)
     }
 
     pub fn write8(&mut self, address: u16, value: u8) {
-        self.bus.write(address, value);
+        self.mem.write(address, value);
     }
 
     pub fn read16(&mut self, address: u16) -> u16 {
@@ -375,7 +380,7 @@ impl CPU {
 }
 
 /// Documented instruction implementations.
-impl CPU {
+impl<M: MemoryAccess> CPU<M> {
     fn lda(&mut self, mode: addressing::Mode) {
         let value = self.read_arg(mode);
         self.reg.a = value;
@@ -758,7 +763,7 @@ impl CPU {
 }
 
 /// Undocumented instructions
-impl CPU {
+impl<M: MemoryAccess> CPU<M> {
     fn lax(&mut self, mode: addressing::Mode) {
         let value = self.read_arg(mode);
         self.reg.a = value;

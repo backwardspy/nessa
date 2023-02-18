@@ -2,7 +2,7 @@ use std::{collections::HashSet, fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
 use color_eyre::Result;
-use nessa_cpu::CPU;
+use nessa_cpu::{MemoryAccess, CPU};
 use nessa_mem::Bus;
 use nessa_ppu::PPU;
 use nessa_rom::ROM;
@@ -33,12 +33,18 @@ struct Args {
     nowait: bool,
 }
 
-struct ByteReader<'a> {
-    cpu: &'a CPU,
+struct ByteReader<'a, M>
+where
+    M: MemoryAccess,
+{
+    cpu: &'a CPU<M>,
     address: u16,
 }
 
-impl Iterator for ByteReader<'_> {
+impl<M> Iterator for ByteReader<'_, M>
+where
+    M: MemoryAccess,
+{
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -48,15 +54,21 @@ impl Iterator for ByteReader<'_> {
     }
 }
 
-struct EmulatorWindow {
+struct EmulatorWindow<M>
+where
+    M: MemoryAccess,
+{
     paused: bool,
     hacks: HashSet<Hack>,
     font: Font,
-    cpu: CPU,
+    cpu: CPU<M>,
 }
 
-impl EmulatorWindow {
-    fn new(cpu: CPU, nowait: bool, font: Font, hacks: HashSet<Hack>) -> Self {
+impl<M> EmulatorWindow<M>
+where
+    M: MemoryAccess,
+{
+    fn new(cpu: CPU<M>, nowait: bool, font: Font, hacks: HashSet<Hack>) -> Self {
         Self {
             paused: !nowait,
             hacks,
@@ -76,7 +88,10 @@ impl EmulatorWindow {
     }
 }
 
-impl WindowHandler for EmulatorWindow {
+impl<M> WindowHandler for EmulatorWindow<M>
+where
+    M: MemoryAccess,
+{
     fn on_key_down(
         &mut self,
         _helper: &mut WindowHelper,
