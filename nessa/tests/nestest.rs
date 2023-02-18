@@ -1,6 +1,7 @@
 use nessa_cpu::{Status, CPU};
 use nessa_disasm::disassemble_instruction;
 use nessa_mem::Bus;
+use nessa_ppu::PPU;
 use nessa_rom::ROM;
 use tracing::{trace, warn};
 
@@ -13,7 +14,7 @@ fn test_nestest_rom() {
 
     let rom = ROM::from_ines(include_bytes!("../../rom/nestest.nes"))
         .expect("failed to load nestest rom");
-    let mut cpu = CPU::new(Bus::new(rom));
+    let mut cpu = CPU::new(Bus::new(rom, PPU::new()));
     cpu.reset();
     cpu.reg.pc = 0xC000;
 

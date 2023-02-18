@@ -176,11 +176,11 @@ impl WindowHandler for EmulatorWindow {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+    let args = Args::parse();
+
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::TRACE)
         .init();
-
-    let args = Args::parse();
 
     // setup graphical stuff
     let window = Window::new_centered("Nessa", (512, 512))
